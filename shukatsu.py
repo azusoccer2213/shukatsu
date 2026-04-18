@@ -14,7 +14,6 @@ FILES = {
     "メモ": "recruit_memo.csv"
 }
 
-# カラム定義を厳密に管理
 COLUMNS = {
     "企業分析": ["更新日", "企業名", "業界", "志望度", "強み", "弱み・課題", "機会・チャンス", "ライバル・競合", "選考状況", "ID_メールアドレス", "パスワード"],
     "ES": ["更新日", "企業名", "設問", "文字数制限", "回答案", "現在文字数", "提出期限"],
@@ -27,11 +26,9 @@ def load_data(key):
     if os.path.exists(filename):
         try:
             df = pd.read_csv(filename)
-            # 不足している列を補完
             for col in COLUMNS[key]:
                 if col not in df.columns:
                     df[col] = ""
-            # 不要な列を削除し、順番を整理
             df = df[COLUMNS[key]]
             df = df.fillna("")
             return df
@@ -79,32 +76,8 @@ if menu == "① ホーム":
             st.metric("今後の予定", f"{upcoming_events} 件")
         else: st.metric("今後の予定", "0 件")
 
-    st.markdown("---")
-    left_col, right_col = st.columns(2)
-    with left_col:
-        st.subheader("⚠️ 近日の提出期限 (ES)")
-        if not df_es.empty:
-            df_es['提出期限'] = pd.to_datetime(df_es['提出期限'], errors='coerce').dt.date
-            upcoming_es = df_es[df_es['提出期限'] >= today].sort_values('提出期限')
-            for _, row in upcoming_es.iterrows():
-                if pd.notnull(row['提出期限']):
-                    days_left = (row['提出期限'] - today).days
-                    alert = "🔴" if days_left <= 3 else "🟡"
-                    st.warning(f"{alert} **{row['提出期限']}** | {row['企業名']}")
-        else: st.info("予定なし")
-        
-    with right_col:
-        st.subheader("📅 今後のスケジュール")
-        if not df_memo.empty:
-            df_memo['日付'] = pd.to_datetime(df_memo['日付'], errors='coerce').dt.date
-            upcoming_sched = df_memo[df_memo['日付'] >= today].sort_values('日付')
-            for _, row in upcoming_sched.iterrows():
-                if pd.notnull(row['日付']):
-                    st.info(f"🔹 **{row['日付']}** | [{row['カテゴリ']}] {row['タイトル']}")
-        else: st.info("予定なし")
-
 # ==========================================
-# ② 企業分析
+# ② 企業分析 (編集機能追加)
 # ==========================================
 elif menu == "② 企業分析":
     st.title("🏢 企業分析")
@@ -119,47 +92,51 @@ elif menu == "② 企業分析":
             with col_f2:
                 status = st.selectbox("選考状況", ["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"])
                 rank = st.slider("志望度", 1, 5, 3)
-
-            st.markdown("##### 企業分析（SWOT・競合分析）")
-            col_sw1, col_sw2 = st.columns(2)
-            with col_sw1:
-                strength = st.text_area("会社の強み")
-                opportunity = st.text_area("機会・チャンス")
-            with col_sw2:
-                weakness = st.text_area("弱み・課題")
-                rival = st.text_area("ライバル・競合他社")
-
-            login_id = st.text_input("マイページID")
-            password = st.text_input("パスワード", type="password")
+            
+            st.markdown("##### SWOT分析")
+            c_sw1, c_sw2 = st.columns(2)
+            with c_sw1:
+                strength = st.text_area("強み")
+                opportunity = st.text_area("機会")
+            with c_sw2:
+                weakness = st.text_area("弱み")
+                rival = st.text_area("競合")
 
             if st.form_submit_button("登録"):
                 if company:
-                    new_data = [datetime.now().strftime("%Y-%m-%d"), company, industry, rank, strength, weakness, opportunity, rival, status, login_id, password]
+                    new_data = [datetime.now().strftime("%Y-%m-%d"), company, industry, rank, strength, weakness, opportunity, rival, status, "", ""]
                     new_row = pd.DataFrame([new_data], columns=COLUMNS["企業分析"])
                     df_company = pd.concat([df_company, new_row], ignore_index=True)
                     save_data("企業分析", df_company)
                     st.rerun()
-                else:
-                    st.error("企業名を入力してください。")
-    
+
     for i, row in df_company.iterrows():
         with st.expander(f"🏢 {row['企業名']} | {row['選考状況']}"):
-            st.write(f"志望度: {'⭐' * int(row['志望度'])}")
-            c1, c2 = st.columns(2)
-            with c1:
+            edit_mode = st.checkbox("編集する", key=f"edit_co_check_{i}")
+            if edit_mode:
+                with st.form(f"edit_form_co_{i}"):
+                    e_status = st.selectbox("選考状況", ["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"], index=["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"].index(row['選考状況']))
+                    e_rank = st.slider("志望度", 1, 5, int(row['志望度']))
+                    e_strength = st.text_area("強み", value=row['強み'])
+                    e_weakness = st.text_area("弱み", value=row['弱み・課題'])
+                    if st.form_submit_button("更新"):
+                        df_company.at[i, '選考状況'] = e_status
+                        df_company.at[i, '志望度'] = e_rank
+                        df_company.at[i, '強み'] = e_strength
+                        df_company.at[i, '弱み・課題'] = e_weakness
+                        df_company.at[i, '更新日'] = datetime.now().strftime("%Y-%m-%d")
+                        save_data("企業分析", df_company)
+                        st.rerun()
+            else:
+                st.write(f"志望度: {'⭐' * int(row['志望度'])}")
                 st.info(f"強み: {row['強み']}")
-                st.success(f"機会: {row['機会・チャンス']}")
-            with c2:
-                st.warning(f"弱み: {row['弱み・課題']}")
-                st.error(f"競合: {row['ライバル・競合']}")
-            
-            if st.button("削除", key=f"del_co_{i}"):
-                df_company = df_company.drop(i).reset_index(drop=True)
-                save_data("企業分析", df_company)
-                st.rerun()
+                if st.button("削除", key=f"del_co_{i}"):
+                    df_company = df_company.drop(i).reset_index(drop=True)
+                    save_data("企業分析", df_company)
+                    st.rerun()
 
 # ==========================================
-# ③ ESページ
+# ③ ESページ (編集機能追加)
 # ==========================================
 elif menu == "③ ESページ":
     st.title("📝 ES管理")
@@ -171,23 +148,36 @@ elif menu == "③ ESページ":
             dl = st.date_input("提出期限")
             ans = st.text_area("回答案")
             if st.form_submit_button("保存"):
-                if co and q:
-                    new_row = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), co, q, 400, ans, len(ans), dl]], columns=COLUMNS["ES"])
-                    df_es = pd.concat([df_es, new_row], ignore_index=True)
-                    save_data("ES", df_es)
-                    st.rerun()
+                new_row = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), co, q, 400, ans, len(ans), dl]], columns=COLUMNS["ES"])
+                df_es = pd.concat([df_es, new_row], ignore_index=True)
+                save_data("ES", df_es)
+                st.rerun()
     
     for i, row in df_es.iterrows():
         with st.expander(f"{row['企業名']} | {row['提出期限']}"):
-            st.write(f"設問: {row['設問']}")
-            st.info(row['回答案'])
-            if st.button("削除", key=f"del_es_{i}"):
-                df_es = df_es.drop(i).reset_index(drop=True)
-                save_data("ES", df_es)
-                st.rerun()
+            edit_mode = st.checkbox("編集する", key=f"edit_es_check_{i}")
+            if edit_mode:
+                with st.form(f"edit_form_es_{i}"):
+                    e_q = st.text_area("設問", value=row['設問'])
+                    e_ans = st.text_area("回答案", value=row['回答案'])
+                    if st.form_submit_button("更新"):
+                        df_es.at[i, '設問'] = e_q
+                        df_es.at[i, '回答案'] = e_ans
+                        df_es.at[i, '現在文字数'] = len(e_ans)
+                        df_es.at[i, '更新日'] = datetime.now().strftime("%Y-%m-%d")
+                        save_data("ES", df_es)
+                        st.rerun()
+            else:
+                st.write(f"設問: {row['設問']}")
+                st.info(row['回答案'])
+                st.caption(f"文字数: {len(row['回答案'])}")
+                if st.button("削除", key=f"del_es_{i}"):
+                    df_es = df_es.drop(i).reset_index(drop=True)
+                    save_data("ES", df_es)
+                    st.rerun()
 
 # ==========================================
-# ④ 自己分析
+# ④ 自己分析 (編集機能追加)
 # ==========================================
 elif menu == "④ 自己分析":
     st.title("🔍 自己分析")
@@ -205,14 +195,27 @@ elif menu == "④ 自己分析":
 
     for i, row in df_self.iterrows():
         with st.expander(f"📌 {row['項目']}"):
-            st.write(row['具体的なエピソード'])
-            if st.button("削除", key=f"del_self_{i}"):
-                df_self = df_self.drop(i).reset_index(drop=True)
-                save_data("自己分析", df_self)
-                st.rerun()
+            edit_mode = st.checkbox("編集する", key=f"edit_self_check_{i}")
+            if edit_mode:
+                with st.form(f"edit_form_self_{i}"):
+                    e_epi = st.text_area("内容", value=row['具体的なエピソード'])
+                    e_method = st.text_area("アピール方法", value=row['面接でのアピール方法'])
+                    if st.form_submit_button("更新"):
+                        df_self.at[i, '具体的なエピソード'] = e_epi
+                        df_self.at[i, '面接でのアピール方法'] = e_method
+                        save_data("自己分析", df_self)
+                        st.rerun()
+            else:
+                st.write(row['具体的なエピソード'])
+                st.subheader("💡 アピール方法")
+                st.write(row['面接でのアピール方法'])
+                if st.button("削除", key=f"del_self_{i}"):
+                    df_self = df_self.drop(i).reset_index(drop=True)
+                    save_data("自己分析", df_self)
+                    st.rerun()
 
 # ==========================================
-# ⑤ リクルート情報メモ
+# ⑤ リクルート情報メモ (編集機能追加)
 # ==========================================
 elif menu == "⑤ リクルート情報メモ":
     st.title("📓 メモ")
@@ -231,8 +234,19 @@ elif menu == "⑤ リクルート情報メモ":
 
     for i, row in df_memo.iterrows():
         with st.expander(f"{row['日付']} | {row['タイトル']}"):
-            st.write(row['内容'])
-            if st.button("削除", key=f"del_memo_{i}"):
-                df_memo = df_memo.drop(i).reset_index(drop=True)
-                save_data("メモ", df_memo)
-                st.rerun()
+            edit_mode = st.checkbox("編集する", key=f"edit_memo_check_{i}")
+            if edit_mode:
+                with st.form(f"edit_form_memo_{i}"):
+                    e_t = st.text_input("タイトル", value=row['タイトル'])
+                    e_cnt = st.text_area("内容", value=row['内容'])
+                    if st.form_submit_button("更新"):
+                        df_memo.at[i, 'タイトル'] = e_t
+                        df_memo.at[i, '内容'] = e_cnt
+                        save_data("メモ", df_memo)
+                        st.rerun()
+            else:
+                st.write(row['内容'])
+                if st.button("削除", key=f"del_memo_{i}"):
+                    df_memo = df_memo.drop(i).reset_index(drop=True)
+                    save_data("メモ", df_memo)
+                    st.rerun()
