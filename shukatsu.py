@@ -14,8 +14,9 @@ FILES = {
     "メモ": "recruit_memo.csv"
 }
 
+# 企業分析に「内容（メモ）」を追加
 COLUMNS = {
-    "企業分析": ["更新日", "企業名", "業界", "志望度", "強み", "弱み・課題", "機会・チャンス", "ライバル・競合", "選考状況", "ID_メールアドレス", "パスワード"],
+    "企業分析": ["更新日", "企業名", "業界", "志望度", "強み", "弱み・課題", "機会・チャンス", "ライバル・競合", "選考状況", "ID_メールアドレス", "パスワード", "内容"],
     "ES": ["更新日", "企業名", "設問", "文字数制限", "回答案", "現在文字数", "提出期限"],
     "自己分析": ["更新日", "項目", "具体的なエピソード", "面接でのアピール方法"],
     "メモ": ["日付", "カテゴリ", "タイトル", "ID_メールアドレス", "パスワード", "内容"]
@@ -77,7 +78,7 @@ if menu == "① ホーム":
         else: st.metric("今後の予定", "0 件")
 
 # ==========================================
-# ② 企業分析 (編集機能追加)
+# ② 企業分析 (ID・パスワード・メモ欄を追加)
 # ==========================================
 elif menu == "② 企業分析":
     st.title("🏢 企業分析")
@@ -89,10 +90,15 @@ elif menu == "② 企業分析":
             with col_f1:
                 company = st.text_input("企業名*")
                 industry = st.selectbox("業界", ["メーカー", "IT・通信", "商社", "金融", "コンサル", "インフラ", "サービス", "その他"])
+                c_id = st.text_input("ログインID / メールアドレス")
             with col_f2:
                 status = st.selectbox("選考状況", ["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"])
                 rank = st.slider("志望度", 1, 5, 3)
+                c_pw = st.text_input("パスワード", type="password")
             
+            st.markdown("##### 企業メモ")
+            c_memo = st.text_area("備考・メモ (社風や選考の注意点など)")
+
             st.markdown("##### SWOT分析")
             c_sw1, c_sw2 = st.columns(2)
             with c_sw1:
@@ -104,7 +110,11 @@ elif menu == "② 企業分析":
 
             if st.form_submit_button("登録"):
                 if company:
-                    new_data = [datetime.now().strftime("%Y-%m-%d"), company, industry, rank, strength, weakness, opportunity, rival, status, "", ""]
+                    new_data = [
+                        datetime.now().strftime("%Y-%m-%d"), 
+                        company, industry, rank, strength, weakness, 
+                        opportunity, rival, status, c_id, c_pw, c_memo
+                    ]
                     new_row = pd.DataFrame([new_data], columns=COLUMNS["企業分析"])
                     df_company = pd.concat([df_company, new_row], ignore_index=True)
                     save_data("企業分析", df_company)
@@ -115,13 +125,24 @@ elif menu == "② 企業分析":
             edit_mode = st.checkbox("編集する", key=f"edit_co_check_{i}")
             if edit_mode:
                 with st.form(f"edit_form_co_{i}"):
-                    e_status = st.selectbox("選考状況", ["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"], index=["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"].index(row['選考状況']))
-                    e_rank = st.slider("志望度", 1, 5, int(row['志望度']))
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        e_status = st.selectbox("選考状況", ["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"], index=["興味あり", "説明会待ち", "ES提出済", "面接(1次)", "面接(2次)", "最終面接", "内定", "お見送り"].index(row['選考状況']))
+                        e_id = st.text_input("ログインID / メールアドレス", value=row['ID_メールアドレス'])
+                    with col_e2:
+                        e_rank = st.slider("志望度", 1, 5, int(row['志望度']))
+                        e_pw = st.text_input("パスワード", value=row['パスワード'])
+                    
+                    e_memo = st.text_area("備考・メモ", value=row['内容'])
                     e_strength = st.text_area("強み", value=row['強み'])
                     e_weakness = st.text_area("弱み", value=row['弱み・課題'])
+
                     if st.form_submit_button("更新"):
                         df_company.at[i, '選考状況'] = e_status
                         df_company.at[i, '志望度'] = e_rank
+                        df_company.at[i, 'ID_メールアドレス'] = e_id
+                        df_company.at[i, 'パスワード'] = e_pw
+                        df_company.at[i, '内容'] = e_memo
                         df_company.at[i, '強み'] = e_strength
                         df_company.at[i, '弱み・課題'] = e_weakness
                         df_company.at[i, '更新日'] = datetime.now().strftime("%Y-%m-%d")
@@ -129,14 +150,25 @@ elif menu == "② 企業分析":
                         st.rerun()
             else:
                 st.write(f"志望度: {'⭐' * int(row['志望度'])}")
-                st.info(f"強み: {row['強み']}")
+                
+                c_acc1, c_acc2 = st.columns(2)
+                with c_acc1:
+                    st.code(f"ID: {row['ID_メールアドレス']}", language="text")
+                with c_acc2:
+                    st.code(f"PW: {row['パスワード']}", language="text")
+                
+                if row['内容']:
+                    st.info(f"📝 企業メモ:\n{row['内容']}")
+                
+                st.write(f"💪 強み: {row['強み']}")
+                
                 if st.button("削除", key=f"del_co_{i}"):
                     df_company = df_company.drop(i).reset_index(drop=True)
                     save_data("企業分析", df_company)
                     st.rerun()
 
 # ==========================================
-# ③ ESページ (編集機能追加)
+# ③ ESページ 
 # ==========================================
 elif menu == "③ ESページ":
     st.title("📝 ES管理")
@@ -177,7 +209,7 @@ elif menu == "③ ESページ":
                     st.rerun()
 
 # ==========================================
-# ④ 自己分析 (編集機能追加)
+# ④ 自己分析
 # ==========================================
 elif menu == "④ 自己分析":
     st.title("🔍 自己分析")
@@ -215,7 +247,7 @@ elif menu == "④ 自己分析":
                     st.rerun()
 
 # ==========================================
-# ⑤ リクルート情報メモ (編集機能追加)
+# ⑤ リクルート情報メモ
 # ==========================================
 elif menu == "⑤ リクルート情報メモ":
     st.title("📓 メモ")
